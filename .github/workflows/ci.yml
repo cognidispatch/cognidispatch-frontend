@@ -1,6 +1,7 @@
 name: CI — Frontend
 
 permissions:
+  id-token: write
   contents: write
   actions: read
   checks: read
@@ -70,16 +71,7 @@ jobs:
       service_name: ""
       next_public_server_ip: "https://cognidispatch.g0ku1.online"
       sonar_project_key: cogni-frontend
-    secrets:
-      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    secrets: inherit
 
   update-helm:
     name: Update Helm Chart
@@ -91,5 +83,4 @@ jobs:
       image-tag: ${{ needs.prepare.outputs.tag }}
       environment: ${{ needs.prepare.outputs.environment }}
       require-approval: ${{ needs.prepare.outputs.is_production == 'true' }}
-    secrets:
-      HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
+    secrets: inherit
