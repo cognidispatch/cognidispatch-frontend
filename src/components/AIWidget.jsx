@@ -281,18 +281,42 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setVisionErrorMessage("Image exceeds 5MB size limit.");
-      return;
-    }
-
     setVisionErrorMessage('');
     setVisionTriageResult(null);
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setSelectedImage(reader.result); // preview data URL
-      setBase64Image(reader.result); // base64 value
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG with 0.7 quality to keep size < 100KB
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setSelectedImage(dataUrl);
+        setBase64Image(dataUrl);
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
