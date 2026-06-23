@@ -61,26 +61,30 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
     };
   }, []);
 
+  const speakNative = (text) => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel(); // Stop any ongoing speech
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        const enVoice = voices.find(v => v.lang.startsWith('en')) || null;
+        if (enVoice) {
+          utterance.voice = enVoice;
+        }
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error("Browser native speech synthesis failed:", err);
+      }
+    }
+  };
+
   // Speech Synthesis (TTS) Helper
   const speakText = async (text) => {
     if (!text || text.trim() === '') return;
 
     // Check if we are running in Offline Demo Mode (no real speech credentials)
     if (isDemoMode) {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        try {
-          window.speechSynthesis.cancel(); // Stop any ongoing speech
-          const utterance = new SpeechSynthesisUtterance(text);
-          const voices = window.speechSynthesis.getVoices();
-          const enVoice = voices.find(v => v.lang.startsWith('en')) || null;
-          if (enVoice) {
-            utterance.voice = enVoice;
-          }
-          window.speechSynthesis.speak(utterance);
-        } catch (err) {
-          console.error("Browser native speech synthesis failed:", err);
-        }
-      }
+      speakNative(text);
       return;
     }
 
@@ -118,6 +122,7 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
             console.log("[Azure Speech synthesis] Completed successfully.");
           } else {
             console.warn("[Azure Speech synthesis] Synthesis issue:", result.errorDetails);
+            speakNative(text); // Fallback to native Web Speech API
           }
           synthesizer.close();
           if (activeSynthesizerRef.current === synthesizer) {
@@ -126,6 +131,7 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
         },
         (err) => {
           console.error("[Azure Speech synthesis] Failed:", err);
+          speakNative(text); // Fallback to native Web Speech API
           synthesizer.close();
           if (activeSynthesizerRef.current === synthesizer) {
             activeSynthesizerRef.current = null;
@@ -134,12 +140,7 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
       );
     } catch (err) {
       console.error("Failed to load Azure Speech SDK for synthesis:", err);
-      // Fallback to Web Speech API
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        window.speechSynthesis.speak(utterance);
-      }
+      speakNative(text); // Fallback to Web Speech API
     }
   };
 
@@ -196,64 +197,99 @@ export default function AIWidget({ onTranscription, onVisionTriage, onFallback, 
   const handleMicClick = async () => {
     if (disabled || internalState === 'LISTENING' || internalState === 'PROCESSING') return;
 
-    if (isDemoMode) {
-      setErrorMessage("Azure Speech credentials missing. Speech input disabled. Use the simulation box below.");
-      return;
-    }
-
-    setInternalState('LISTENING');
     setTranscript('');
     setErrorMessage('');
 
-    let recognizer;
+    const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    
+    if (SpeechRecognition) {
+      // Use native browser SpeechRecognition directly to bypass network restrictions
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
 
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      const SpeechSDK = await import('microsoft-cognitiveservices-speech-sdk');
+        recognition.onstart = () => {
+          setInternalState('LISTENING');
+        };
 
-      let currentToken = speechToken;
-      let currentRegion = speechRegion;
+        recognition.onerror = (event) => {
+          console.error("Native speech recognition error:", event.error);
+          handleRecognitionFailure(`Speech recognition failed: ${event.error}`);
+        };
 
-      if (!currentToken) {
-        setInternalState('FETCHING_TOKEN');
-        const tokenRes = await axios.get(`${serverUrl}/api/ai/speech-token`);
-        currentToken = tokenRes.data.token;
-        currentRegion = tokenRes.data.region;
-        setSpeechToken(currentToken);
-        setSpeechRegion(currentRegion);
+        recognition.onresult = (event) => {
+          const text = event.results[0][0].transcript;
+          setTranscript(text);
+          setInternalState('PROCESSING');
+          onTranscription(text);
+        };
+
+        recognition.start();
+      } catch (err) {
+        console.error("Mic init failed:", err);
+        handleRecognitionFailure(err.message || "Failed to initialize microphone.");
+      }
+    } else {
+      // Fallback to Azure Speech SDK if browser has no native speech recognition
+      if (isDemoMode) {
+        setErrorMessage("Azure Speech credentials missing. Speech input disabled. Use the simulation box below.");
+        return;
       }
 
       setInternalState('LISTENING');
+      let recognizer;
 
-      const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(currentToken, currentRegion);
-      speechConfig.speechRecognitionLanguage = 'en-US';
-      const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-      recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const SpeechSDK = await import('microsoft-cognitiveservices-speech-sdk');
 
-      recognizer.recognizeOnceAsync(
-        (result) => {
-          if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-            const text = result.text;
-            setTranscript(text);
-            setInternalState('PROCESSING');
-            onTranscription(text);
-          } else {
-            console.warn("Speech recognition issue, reason code:", result.reason);
-            handleRecognitionFailure("Speech not recognized. Please speak clearly.");
-          }
-          if (recognizer) recognizer.close();
-        },
-        (err) => {
-          console.error("Recognizer error:", err);
-          handleRecognitionFailure(err.message || "Speech SDK error occurred.");
-          if (recognizer) recognizer.close();
+        let currentToken = speechToken;
+        let currentRegion = speechRegion;
+
+        if (!currentToken) {
+          setInternalState('FETCHING_TOKEN');
+          const tokenRes = await axios.get(`${serverUrl}/api/ai/speech-token`);
+          currentToken = tokenRes.data.token;
+          currentRegion = tokenRes.data.region;
+          setSpeechToken(currentToken);
+          setSpeechRegion(currentRegion);
         }
-      );
 
-    } catch (err) {
-      console.error("Mic init failed:", err);
-      handleRecognitionFailure(err.message || "Failed to initialize microphone.");
-      if (recognizer) recognizer.close();
+        setInternalState('LISTENING');
+
+        const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(currentToken, currentRegion);
+        speechConfig.speechRecognitionLanguage = 'en-US';
+        const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+        recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+        recognizer.recognizeOnceAsync(
+          (result) => {
+            if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+              const text = result.text;
+              setTranscript(text);
+              setInternalState('PROCESSING');
+              onTranscription(text);
+            } else {
+              console.warn("Speech recognition issue, reason code:", result.reason);
+              handleRecognitionFailure("Speech not recognized. Please speak clearly.");
+            }
+            if (recognizer) recognizer.close();
+          },
+          (err) => {
+            console.error("Recognizer error:", err);
+            handleRecognitionFailure(err.message || "Speech SDK error occurred.");
+            if (recognizer) recognizer.close();
+          }
+        );
+
+      } catch (err) {
+        console.error("Mic init failed:", err);
+        handleRecognitionFailure(err.message || "Failed to initialize microphone.");
+        if (recognizer) recognizer.close();
+      }
     }
   };
 
