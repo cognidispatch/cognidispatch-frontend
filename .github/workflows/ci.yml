@@ -74,7 +74,14 @@ jobs:
       service_name: ""
       next_public_server_ip: "https://cognidispatch.g0ku1.online"
       sonar_project_key: cogni-frontend
-    secrets: inherit
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
   update-helm:
     name: Update Helm Chart
