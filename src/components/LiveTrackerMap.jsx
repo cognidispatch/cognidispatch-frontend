@@ -16,8 +16,8 @@ function ChangeMapCenter({ coords }) {
 
 export default function LiveTrackerMap({ userCoords, techCoords, vendor }) {
   // Safe default fallback center
-  const centerLat = userCoords?.lat || 40.7128;
-  const centerLng = userCoords?.lng || -74.0060;
+  const centerLat = userCoords?.lat || 8.53633;
+  const centerLng = userCoords?.lng || 76.88329;
 
   // Custom User Marker Icon (Blue pulse circle)
   const userIcon = typeof window !== 'undefined' ? L.divIcon({

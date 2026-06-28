@@ -69,10 +69,10 @@ export default function ManualGrid({ onManualDispatch, onLocation, onFallback, d
         onLocation(userLoc);
       },
       (error) => {
-        console.warn("Geolocation failed or denied in manual grid. Defaulting to NYC coordinates.", error);
+        console.warn("Geolocation failed or denied in manual grid. Defaulting to Trivandrum coordinates.", error);
         setFetchingLocation(false);
         setIsSimulationLocation(true);
-        const fallbackCoords = { lat: 40.7128, lng: -74.0060 }; // NYC Center where mock vendors reside
+        const fallbackCoords = { lat: 8.53633, lng: 76.88329 }; // Trivandrum Center where mock vendors reside
         setCoords(fallbackCoords);
         onLocation(fallbackCoords);
       },
